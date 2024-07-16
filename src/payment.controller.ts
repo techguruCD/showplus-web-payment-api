@@ -1,6 +1,7 @@
 import { Request, Response } from "express";
 import crypto from 'crypto';
 import axios from 'axios'
+const request = require('request');
 
 const getAuthUrl = (idc_name : string) => {
   const url = "stdpay.inicis.com/api/payAuth";
@@ -73,51 +74,50 @@ export const returnUrl = async (req: Request, res: Response) => {
     }
 
     if (authUrl == authUrl2) {
-      try {
-        const response = await axios.post(authUrl2, options)
-        const jsoncode = JSON.stringify(response.data)
-        const result = JSON.parse(jsoncode)
-        let candyValue : any = 0 ;
-        if( result.resultCode === '0000') {
-          const chargeUserId = Number(result.MOID.split(".")[0]);
-          const productId = Number(result.MOID.split(".")[1]);
-          const params = {
-            chargeUserId,
-            productId,
-            MOID: result.MOID,
-            CARD_PurchaseName: result?.CARD_PurchaseName, 
-            payMethod: result?.payMethod,
+      request.post({method: 'POST', uri: authUrl2, form: options, json: true}, async (err: any,httpResponse: any,body: any) => {
+        try {
+          let jsoncode:string = (err) ? err : JSON.stringify(body);
+          let result:any = JSON.parse(jsoncode);
+          let candyValue : any = 0 ;
+          if( result.resultCode === '0000' ) {
+            const chargeUserId = Number(result.MOID.split(".")[0]);
+            const productId = Number(result.MOID.split(".")[1]);
+            const params = {
+              chargeUserId,
+              productId,
+              MOID: result.MOID,
+              CARD_PurchaseName: result?.CARD_PurchaseName, 
+              payMethod: result?.payMethod,
+            }
+            const tempRes = await axios.post(process.env.SHOWPLUS_API_URL + "/api/web/payment/candyCharge", params);
+            candyValue = tempRes.data.candyValue;
           }
-          const res = await axios.post(process.env.SHOWPLUS_API_URL + "/api/web/payment/candyCharge", params);
-          candyValue = res.data.candyValue;
+          if ( result.resultCode === 'R201' ) {
+            const params = {
+              resultMsg: '정상처리되었습니다.',
+              resultCode: '0000',
+              candyValue
+            }
+            res.redirect(`/candyCharge/${JSON.stringify(params)}`)
+          } else {
+            const params = {
+              resultMsg: result.resultMsg,
+              resultCode: result.resultCode,
+              candyValue
+            }
+            res.redirect(`/candyCharge/${JSON.stringify(params)}`)
+          }
+        } catch (err) {
+          console.log(err);
+          const netCancelUrl2 = getNetCancelUrl(idc_name)
+          if(netCancelUrl == netCancelUrl2) {
+            request.post({method: 'POST', uri: netCancelUrl2, form: options, json: true}, (err:any, httpResponse:any, body:any) =>{
+              let result = (err) ? err : JSON.stringify(body);
+              console.log("<p>"+result+"</p>");
+            });
+          }
         }
-        if ( result.resultCode === 'R201' ) {
-          const params = {
-            resultMsg: '정상처리되었습니다.',
-            resultCode: '0000',
-            candyValue
-          }
-          res.redirect(`/candyCharge/${JSON.stringify(params)}`)
-        } else {
-          const params = {
-            resultMsg: result.resultMsg,
-            resultCode: result.resultCode,
-            candyValue
-          }
-          res.redirect(`/candyCharge/${JSON.stringify(params)}`)
-        }
-      } catch (error) {
-        console.log("===========   error   ================", error)
-        const netCancelUrl2 = getNetCancelUrl(idc_name);
-        if (netCancelUrl == netCancelUrl2) {
-          try {
-            const res = await axios.post(netCancelUrl2, options);
-            console.log("=============== newCancelUrl2 res ================= ", res.data);
-          } catch (err) {
-            console.log("=============== newCancelUrl2 error ================= ", err);
-          }
-        }
-      }
+      })
     } else if(req.body.resultCode === 'R201') {
       const params = {
         resultMsg: '정상처리되었습니다.',
