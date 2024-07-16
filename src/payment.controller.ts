@@ -3,50 +3,50 @@ import crypto from 'crypto';
 import axios from 'axios'
 const request = require('request');
 
-const getAuthUrl = (idc_name : string) => {
+const getAuthUrl = (idc_name: string) => {
   const url = "stdpay.inicis.com/api/payAuth";
-  
-  let authUrl : string = "";
+
+  let authUrl: string = "";
   switch (idc_name) {
     case "fc":
-    authUrl = "https://fc" + url;
-    break;
+      authUrl = "https://fc" + url;
+      break;
     case "ks":
-    authUrl = "https://ks" + url;
-    break ;
+      authUrl = "https://ks" + url;
+      break;
     case "stg":
-    authUrl = "https://stg" + url;
-    break;
+      authUrl = "https://stg" + url;
+      break;
     default:
-    break;
+      break;
   }
   return authUrl;
 }
-  
-const getNetCancelUrl = (idc_name : string) => {
+
+const getNetCancelUrl = (idc_name: string) => {
   const url = "stdpay.inicis.com/api/netCancel";
-  
-  let netCancel : string = "";
+
+  let netCancel: string = "";
   switch (idc_name) {
     case 'fc':
-    netCancel = "https://fc"+ url;
-    break;
+      netCancel = "https://fc" + url;
+      break;
     case 'ks':
-    netCancel = "https://ks"+ url;
-    break;
+      netCancel = "https://ks" + url;
+      break;
     case 'stg':
-    netCancel = "https://stg"+ url;
-    break;
+      netCancel = "https://stg" + url;
+      break;
     default:
-    break;
+      break;
   }
   return netCancel;
 }
 
 export const returnUrl = async (req: Request, res: Response) => {
-  if(req.body.resultCode === '0000' ) {
+  if (req.body.resultCode === '0000') {
     console.log("===========   req.body.resultCode  0000  ================", JSON.stringify(req.body));
-    const mid = req?.body?.mid ;
+    const mid = req?.body?.mid;
     const signKey = process.env.SIGNKEY;
     const authToken = req?.body?.authToken;
     const netCancelUrl = req?.body?.netCancelUrl;
@@ -74,25 +74,27 @@ export const returnUrl = async (req: Request, res: Response) => {
     }
 
     if (authUrl == authUrl2) {
-      request.post({method: 'POST', uri: authUrl2, form: options, json: true}, async (err: any,httpResponse: any,body: any) => {
+      request.post({ method: 'POST', uri: authUrl2, form: options, json: true }, async (err: any, httpResponse: any, body: any) => {
         try {
-          let jsoncode:string = (err) ? err : JSON.stringify(body);
-          let result:any = JSON.parse(jsoncode);
-          let candyValue : any = 0 ;
-          if( result.resultCode === '0000' ) {
+          console.log("first request ============ ", authUrl2, " ==============", JSON.stringify(body));
+          let jsoncode: string = (err) ? err : JSON.stringify(body);
+          let result: any = JSON.parse(jsoncode);
+          let candyValue: any = 0;
+          if (result.resultCode === '0000') {
             const chargeUserId = Number(result.MOID.split(".")[0]);
             const productId = Number(result.MOID.split(".")[1]);
             const params = {
               chargeUserId,
               productId,
               MOID: result.MOID,
-              CARD_PurchaseName: result?.CARD_PurchaseName, 
+              CARD_PurchaseName: result?.CARD_PurchaseName,
               payMethod: result?.payMethod,
             }
-            const tempRes = await axios.post(process.env.SHOWPLUS_API_URL + "/api/web/payment/candyCharge", params);
+            const { data: tempRes } = await axios.post(process.env.SHOWPLUS_API_URL + "/api/web/payment/candyCharge", params);
+            console.log("second request ============ ", process.env.SHOWPLUS_API_URL + "/api/web/payment/candyCharge", " ==============", JSON.stringify(tempRes.data));
             candyValue = tempRes.data.candyValue;
           }
-          if ( result.resultCode === 'R201' ) {
+          if (result.resultCode === 'R201') {
             const params = {
               resultMsg: '정상처리되었습니다.',
               resultCode: '0000',
@@ -110,40 +112,41 @@ export const returnUrl = async (req: Request, res: Response) => {
         } catch (err) {
           console.log(err);
           const netCancelUrl2 = getNetCancelUrl(idc_name)
-          if(netCancelUrl == netCancelUrl2) {
-            request.post({method: 'POST', uri: netCancelUrl2, form: options, json: true}, (err:any, httpResponse:any, body:any) =>{
+          if (netCancelUrl == netCancelUrl2) {
+            request.post({ method: 'POST', uri: netCancelUrl2, form: options, json: true }, async (err: any, httpResponse: any, body: any) => {
+              console.log("netCancelUrl ============ ", netCancelUrl2, " ==============", JSON.stringify(body));
               let result = (err) ? err : JSON.stringify(body);
-              console.log("<p>"+result+"</p>");
+              console.log("<p>" + result + "</p>");
             });
           }
         }
       })
-    } else if(req.body.resultCode === 'R201') {
-      const params = {
-        resultMsg: '정상처리되었습니다.',
-        resultCode: '0000',
-        candyValue: 0
-      }
-      res.redirect(`/candyCharge/${JSON.stringify(params)}`)
-    } else {
-      // res.json({
-      //   resultCode: req.body?.resultCode,
-      //   resultMsg: req.body?.resultMsg,
-      //   tid: req.body?.tid,
-      //   MOID: req.body?.MOID,
-      //   TotPrice: req.body?.TotPrice,
-      //   goodName: req.body?.goodName,
-      //   applDate: req.body?.applDate,
-      //   applTime: req.body?.applTime
-      // })
-      console.log(" ============ error =====", JSON.stringify(req.body))
-      const params = {
-        resultMsg: req.body?.resultMsg,
-        resultCode: req.body?.resultCode,
-        candyValue: -1
-      }
-      res.redirect(`/candyCharge/${JSON.stringify(params)}`);
     }
+  } else if (req.body.resultCode === 'R201') {
+    const params = {
+      resultMsg: '정상처리되었습니다.',
+      resultCode: '0000',
+      candyValue: 0
+    }
+    res.redirect(`/candyCharge/${JSON.stringify(params)}`)
+  } else {
+    // res.json({
+    //   resultCode: req.body?.resultCode,
+    //   resultMsg: req.body?.resultMsg,
+    //   tid: req.body?.tid,
+    //   MOID: req.body?.MOID,
+    //   TotPrice: req.body?.TotPrice,
+    //   goodName: req.body?.goodName,
+    //   applDate: req.body?.applDate,
+    //   applTime: req.body?.applTime
+    // })
+    console.log(" ============ error =====", JSON.stringify(req.body))
+    const params = {
+      resultMsg: req.body?.resultMsg,
+      resultCode: req.body?.resultCode,
+      candyValue: -1
+    }
+    res.redirect(`/candyCharge/${JSON.stringify(params)}`);
   }
 }
 
